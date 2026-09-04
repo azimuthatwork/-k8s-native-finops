@@ -39,7 +39,7 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-
+0y
 # Global counters
 TOTAL_CHECKS=0
 PASSED_CHECKS=0

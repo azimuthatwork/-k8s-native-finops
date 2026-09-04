@@ -1,0 +1,125 @@
+name: Phase 0 Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      fix-mode:
+        description: 'Attempt auto-fix for safe operations'
+        required: false
+        default: 'false'
+        type: boolean
+      target-namespace:
+        description: 'Target specific namespace (optional)'
+        required: false
+        type: string
+
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'docs/phase0-validation-report-template.md'
+      - '.github/workflows/phase0-validation.yml'
+
+jobs:
+  validate:
+    name: Phase 0 Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    permissions:
+      contents: read
+      # Need permission to create pods for connectivity tests
+      # This requires a service account with appropriate RBAC
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup kubectl
+        uses: azure/k8s-set-context@v4
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+      
+      - name: Verify cluster access
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+      
+      - name: Make scripts executable
+        run: chmod +x scripts/*.sh
+      
+      - name: Run Phase 0 Validation
+        id: validation
+        run: |
+          if [[ "${{ github.event.inputs.fix-mode }}" == "true" ]]; then
+            ./scripts/validate-phase0.sh --fix
+          else
+            ./scripts/validate-phase0.sh
+          fi
+        env:
+          TARGET_NAMESPACE: ${{ github.event.inputs.target-namespace }}
+      
+      - name: Upload validation report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase0-validation-report
+          path: docs/phase0-validation-report.md
+          retention-days: 30
+      
+      - name: Upload namespace inventory
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: namespace-inventory
+          path: docs/namespace-inventory.md
+          retention-days: 30
+      
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('docs/phase0-validation-report.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## Phase 0 Validation Results\n\n' + report
+            })
+      
+      - name: Fail on critical issues
+        if: failure()
+        run: |
+          echo "::error::Phase 0 validation failed. Check the uploaded report for details."
+          exit 1
+
+  notify:
+    name: Notify on Failure
+    needs: validate
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Slack notification
+        if: env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": "❌ Phase 0 Validation Failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Phase 0 Validation Failed* in `${{ github.repository }}`\nRun: `${{ github.run_id }}`\nBranch: `${{ github.ref_name }}`\n\nCheck the workflow artifacts for the full validation report."
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

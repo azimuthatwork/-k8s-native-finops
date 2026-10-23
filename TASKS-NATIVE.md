@@ -331,12 +331,14 @@ This document breaks down the **PLAN-NATIVE.md** into granular, trackable tasks 
   - [x] **Task 2.2.4:** Add Response Caching (Redis or In-Memory) for Dashboard Overview
 
 ### 2.3 Long-Term Export (Parquet to S3)
-- [ ] **Task 2.3.1:** Create `cost-exporter` CronJob (`cmd/exporter/main.go`)
-  - [ ] Schedule: Daily 02:00 UTC
-  - [ ] Query TSDB for yesterday (1h step) via `/api/v1/query_range`
-  - [ ] Convert to Arrow/Parquet (Apache Arrow Go)
-  - [ ] Partition by `date/cost_center`
-  - [ ] Write to `s3://finops-bucket/cost/allocations/`
+- [x] **Task 2.3.1:** Create `cost-exporter` CronJob (`cmd/exporter/main.go`)
+  - [x] Schedule: Daily 02:00 UTC
+  - [x] Query TSDB for yesterday (1h step) via `/api/v1/query_range`
+  - [x] Convert to Arrow/Parquet (Apache Arrow Go)
+  - [x] Partition by `date/cost_center`
+  - [x] Write to `s3://finops-bucket/cost/allocations/`
+  - [x] Created `cmd/exporter/Dockerfile` for container image
+  - [x] Created `config/exporter/cronjob.yaml` with CronJob, ServiceAccount, and Secret template
 - [ ] **Task 2.3.2:** Define Parquet Schema (PyArrow compatible)
   - [ ] Fields: `timestamp`, `cluster`, `namespace`, `workload`, `kind`, `cost_center`, `team`, `cpu_cores_requested`, `cpu_cores_used`, `memory_gib_requested`, `memory_gib_used`, `storage_gib_requested`, `storage_gib_used`, `compute_cost_usd`, `storage_cost_usd`, `network_cost_usd`, `shared_cost_usd`, `total_cost_usd`, `efficiency_pct`
 - [ ] **Task 2.3.3:** Validate Parquet Read (Athena/Trino/BigQuery external table)

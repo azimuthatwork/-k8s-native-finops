@@ -252,7 +252,7 @@
   - `node_memory_hourly_cost` (gauge)
   - `node_gpu_hourly_cost` (gauge, if applicable)
 
-### 1.1.2 Enhanced cAdvisor Metrics Collection
+### 1.1.2 Enhanced cAdvisor Metrics Collection  --name 
 - [ ] **Task 1.1.2.1:** Verify Alloy DaemonSet `prometheus.exporter.cadvisor` configuration includes:
   - `container_spec_memory_limit_bytes`
   - `container_spec_cpu_quota` / `container_spec_cpu_period`
@@ -600,5 +600,5 @@
 **Phase 2 can begin when:**
 1. All tasks in 1.1, 1.2, 1.3, 1.4, 1.5, 1.6 are ✅ complete
 2. Cost accuracy validated (variance < 10%)
-3. Metric cardinality within acceptable limits
+3. Metric cacleardinality within acceptable limits
 4. Phase 1 implementation report approved by stakeholders

@@ -1,0 +1,83 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: namespacebudgets.finops.io
+  labels:
+    app.kubernetes.io/name: cost-controller
+    app.kubernetes.io/part-of: kube-native-finops
+spec:
+  group: finops.io
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                namespace:
+                  type: string
+                monthlyBudgetUSD:
+                  type: number
+                  format: double
+                alertThresholdPct:
+                  type: number
+                  format: double
+                  default: 80
+                enforcementMode:
+                  type: string
+                  enum: ["Hard", "Soft", "Monitor"]
+                  default: "Monitor"
+                costCenter:
+                  type: string
+                team:
+                  type: string
+            status:
+              type: object
+              properties:
+                currentSpendUSD:
+                  type: number
+                  format: double
+                projectedSpendUSD:
+                  type: number
+                  format: double
+                utilizationPct:
+                  type: number
+                  format: double
+                status:
+                  type: string
+                  enum: ["OK", "Warning", "Critical", "Exceeded"]
+                lastUpdate:
+                  type: string
+                  format: date-time
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+      subresources:
+        status: {}
+  scope: Cluster
+  names:
+    plural: namespacebudgets
+    singular: namespacebudget
+    kind: NamespaceBudget
+    shortNames:
+      - nsbudget
+    categories:
+      - finops
+      - cost-management

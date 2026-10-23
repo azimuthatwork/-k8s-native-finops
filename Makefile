@@ -1,87 +1,84 @@
-# Makefile for Phase 0 Validation
-# Provides convenient targets for running validation checks
+# Phase 0 Native Makefile
+# Usage: make -f native/Makefile <target>
 
-.PHONY: help validate validate-network validate-alloy validate-prometheus validate-crds report clean
+.PHONY: help apply validate clean deploy-ksm deploy-metrics-server deploy-node-exporter deploy-rbac deploy-crds deploy-examples
 
 # Default target
 help:
-	@echo "Phase 0 Validation Targets:"
+	@echo "Kubernetes-Native FinOps Platform - Phase 0"
 	@echo ""
-	@echo "  make validate              - Run all Phase 0 validations"
-	@echo "  make validate-network      - Run network policy validation only"
-	@echo "  make validate-alloy        - Run Alloy configuration validation only"
-	@echo "  make validate-prometheus   - Run Prometheus/Thanos validation only"
-	@echo "  make validate-crds         - Run CRDs & Operators validation only"
-	@echo "  make report                - Generate validation report only"
-	@echo "  make fix                   - Run validation with auto-fix attempts (where safe)"
-	@echo "  make clean                 - Clean up test resources"
-	@echo ""
-	@echo "Options:"
-	@echo "  NAMESPACE=<ns>             - Target specific namespace"
-	@echo "  VERBOSE=1                  - Enable verbose output"
+	@echo "Targets:"
+	@echo "  apply              - Apply all Phase 0 resources"
+	@echo "  validate           - Run Phase 0 validation script"
+	@echo "  clean              - Delete all Phase 0 resources"
+	@echo "  deploy-ksm         - Deploy KSM only"
+	@echo "  deploy-metrics-server - Deploy Metrics Server only"
+	@echo "  deploy-node-exporter - Deploy Node Exporter only"
+	@echo "  deploy-rbac        - Deploy RBAC only"
+	@echo "  deploy-crds        - Deploy CRDs only"
+	@echo "  deploy-examples    - Deploy example CRs only"
+	@echo "  report             - View validation report"
 
-# Run all validations
+# Apply all Phase 0 resources
+apply:
+	kubectl apply -k native/
+
+# Validate Phase 0
 validate:
-	@chmod +x scripts/validate-phase0.sh
-	@./scripts/validate-phase0.sh
+	chmod +x native/scripts/validate-native-phase0.sh
+	./native/scripts/validate-native-phase0.sh
 
-# Run with auto-fix (where safe)
-fix:
-	@chmod +x scripts/validate-phase0.sh
-	@./scripts/validate-phase0.sh --fix
-
-# Network policy validation only
-validate-network:
-	@chmod +x scripts/validate-network-policies.sh
-	@./scripts/validate-network-policies.sh $(if $(VERBOSE),--verbose) $(if $(NAMESPACE),--namespace=$(NAMESPACE))
-
-# Alloy configuration validation only
-validate-alloy:
-	@chmod +x scripts/check-alloy-config.sh
-	@./scripts/check-alloy-config.sh
-
-# Prometheus/Thanos validation only
-validate-prometheus:
-	@chmod +x scripts/check-prometheus-thanos.sh
-	@./scripts/check-prometheus-thanos.sh
-
-# CRDs & Operators validation only
-validate-crds:
-	@chmod +x scripts/check-crds-operators.sh
-	@./scripts/check-crds-operators.sh
-
-# Generate report only
-report:
-	@chmod +x scripts/validate-phase0.sh
-	@./scripts/validate-phase0.sh --report-only
-
-# Clean up any test pods
+# Clean all Phase 0 resources
 clean:
-	@echo "Cleaning up test pods..."
-	@kubectl delete pods -n monitoring -l test=connectivity --grace-period=0 --force 2>/dev/null || true
-	@kubectl delete pods -n monitoring -l test=network-policy-validation --grace-period=0 --force 2>/dev/null || true
-	@kubectl delete pods -n observability -l test=network-policy-validation --grace-period=0 --force 2>/dev/null || true
-	@kubectl delete pods -n cost-management -l test=network-policy-validation --grace-period=0 --force 2>/dev/null || true
-	@echo "Cleanup complete"
+	kubectl delete -k native/ --ignore-not-found=true
 
-# Install required tools
-install-tools:
-	@echo "Checking required tools..."
-	@which kubectl >/dev/null || (echo "kubectl not found" && exit 1)
-	@which curl >/dev/null || (echo "curl not found" && exit 1)
-	@which base64 >/dev/null || (echo "base64 not found" && exit 1)
-	@echo "All required tools available"
+# Individual component deployment
+deploy-ksm:
+	kubectl apply -f native/ksm/
 
-# Quick health check
-health:
-	@echo "=== Quick Cluster Health ==="
-	@kubectl get nodes -o wide
-	@echo ""
-	@echo "=== Key Namespaces ==="
-	@kubectl get ns monitoring observability cost-management --show-labels 2>/dev/null || echo "Some namespaces missing"
-	@echo ""
-	@echo "=== Key Deployments ==="
-	@kubectl get deploy -n monitoring -l app.kubernetes.io/part-of=observability 2>/dev/null || echo "No observability deployments found"
-	@echo ""
-	@echo "=== Prometheus/Thanos ==="
-	@kubectl get prometheus,thanosquery,thanosstore,thanoscompact -n monitoring 2>/dev/null || echo "Prometheus/Thanos not found"
+deploy-metrics-server:
+	kubectl apply -f native/metrics-server/
+
+deploy-node-exporter:
+	kubectl apply -f native/node-exporter/
+
+deploy-rbac:
+	kubectl apply -f native/rbac/
+
+deploy-crds:
+	kubectl apply -f native/crds/
+
+deploy-examples:
+	kubectl apply -f native/examples/
+
+# View report
+report:
+	@if [ -f docs/phase0-native-report.md ]; then cat docs/phase0-native-report.md; else echo "Report not found. Run 'make validate' first."; fi
+
+# Check individual components
+check-ksm:
+	kubectl get deployment kube-state-metrics -n monitoring -o wide
+	kubectl get configmap kube-state-metrics-config -n monitoring -o yaml
+	kubectl get networkpolicy kube-state-metrics-allow-cost-controller -n monitoring -o yaml
+
+check-metrics-server:
+	kubectl get deployment metrics-server -n kube-system -o wide
+	kubectl top nodes
+	kubectl top pods -A
+
+check-node-exporter:
+	kubectl get daemonset node-exporter -n monitoring -o wide
+	kubectl get service node-exporter -n monitoring -o yaml
+	kubectl get networkpolicy node-exporter-allow-cost-controller -n monitoring -o yaml
+
+check-rbac:
+	kubectl get sa cost-controller-sa -n cost-management -o yaml
+	kubectl get clusterrole cost-controller-reader -o yaml
+	kubectl get clusterrolebinding cost-controller-reader-binding -o yaml
+
+check-crds:
+	kubectl get crd | grep finops.io
+	kubectl get crd costallocations.finops.io -o jsonpath='{.spec.versions[0].subresources.status}'
+
+check-examples:
+	kubectl get namespacebudget finops-system-budget -n finops-system -o yaml

@@ -1,0 +1,88 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: costallocations.finops.io
+  labels:
+    app.kubernetes.io/name: cost-controller
+    app.kubernetes.io/part-of: kube-native-finops
+spec:
+  group: finops.io
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                workloadRef:
+                  type: object
+                  properties:
+                    apiVersion:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required: ["apiVersion", "kind", "name", "namespace"]
+                namespaceLabels:
+                  type: object
+                  additionalProperties:
+                    type: string
+            status:
+              type: object
+              properties:
+                hourlyCostUSD:
+                  type: number
+                  format: double
+                cpuCoresRequested:
+                  type: number
+                  format: double
+                cpuCoresUsed:
+                  type: number
+                  format: double
+                memoryBytesRequested:
+                  type: integer
+                  format: int64
+                memoryBytesUsed:
+                  type: integer
+                  format: int64
+                efficiencyRatio:
+                  type: number
+                  format: double
+                lastUpdate:
+                  type: string
+                  format: date-time
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+      subresources:
+        status: {}
+  scope: Namespaced
+  names:
+    plural: costallocations
+    singular: costallocation
+    kind: CostAllocation
+    shortNames:
+      - costalloc
+    categories:
+      - finops
+      - cost-management

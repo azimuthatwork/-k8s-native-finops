@@ -1,0 +1,14 @@
+apiVersion: finops.io/v1alpha1
+kind: NamespaceBudget
+metadata:
+  name: finops-system-budget
+  labels:
+    app.kubernetes.io/name: cost-controller
+    app.kubernetes.io/part-of: kube-native-finops
+spec:
+  namespace: finops-system
+  monthlyBudgetUSD: 500.00
+  alertThresholdPct: 80
+  enforcementMode: Monitor
+  costCenter: platform-engineering
+  team: finops-platform

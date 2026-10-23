@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-state-metrics-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/part-of: kube-native-finops
+data:
+  config.yaml: |
+    metric-allowlist:
+      - kube_pod_container_resource_requests
+      - kube_pod_container_resource_limits
+      - kube_pod_container_resource_usage
+      - kube_pod_status_phase
+      - kube_pod_status_ready
+      - kube_pod_info
+      - kube_pod_labels
+      - kube_pod_owner
+      - kube_node_status_capacity
+      - kube_node_status_allocatable
+      - kube_node_labels
+      - kube_namespace_labels
+      - kube_persistentvolume_info
+      - kube_persistentvolumeclaim_info
+    label-allowlist:
+      - app
+      - version
+      - cost-center
+      - team
+    namespace-label-allowlist:
+      - cost-center
+      - team
+      - env
+    metric-labels-allowlist:
+      - kube_pod_labels:
+        - app
+        - version
+        - cost-center
+        - team
+      - kube_namespace_labels:
+        - cost-center
+        - team
+        - env

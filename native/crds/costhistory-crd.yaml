@@ -1,0 +1,87 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: costhistories.finops.io
+  labels:
+    app.kubernetes.io/name: cost-controller
+    app.kubernetes.io/part-of: kube-native-finops
+spec:
+  group: finops.io
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                scope:
+                  type: string
+                  enum: ["cluster", "namespace", "workload"]
+                scopeName:
+                  type: string
+                granularity:
+                  type: string
+                  enum: ["hourly", "daily"]
+            status:
+              type: object
+              properties:
+                dataPoints:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      timestamp:
+                        type: string
+                        format: date-time
+                      totalCostUSD:
+                        type: number
+                        format: double
+                      computeCostUSD:
+                        type: number
+                        format: double
+                      storageCostUSD:
+                        type: number
+                        format: double
+                      networkCostUSD:
+                        type: number
+                        format: double
+                      sharedCostUSD:
+                        type: number
+                        format: double
+                      cpuCoresRequested:
+                        type: number
+                        format: double
+                      cpuCoresUsed:
+                        type: number
+                        format: double
+                      memoryGiBRequested:
+                        type: number
+                        format: double
+                      memoryGiBUsed:
+                        type: number
+                        format: double
+                      storageGiBRequested:
+                        type: number
+                        format: double
+                      storageGiBUsed:
+                        type: number
+                        format: double
+                      efficiencyPct:
+                        type: number
+                        format: double
+      subresources:
+        status: {}
+  scope: Cluster
+  names:
+    plural: costhistories
+    singular: costhistory
+    kind: CostHistory
+    shortNames:
+      - costhist
+    categories:
+      - finops
+      - cost-management

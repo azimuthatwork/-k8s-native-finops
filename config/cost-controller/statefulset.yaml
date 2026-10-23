@@ -1,0 +1,178 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cost-controller
+  namespace: cost-management
+  labels:
+    app: cost-controller
+    component: finops
+spec:
+  serviceName: cost-controller
+  replicas: 1  # MVP: Single replica with fast failover; HA: 2 replicas with WAL replication
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: cost-controller
+  template:
+    metadata:
+      labels:
+        app: cost-controller
+        component: finops
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: cost-controller-sa
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+      - name: cost-controller
+        image: ghcr.io/yourorg/kube-native-finops/cost-controller:v0.1.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http-api
+        - containerPort: 8081
+          name: grpc-wal
+        - containerPort: 9090
+          name: metrics
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: TSDB_DATA_DIR
+          value: "/data/tsdb"
+        - name: TSDB_RETENTION_DURATION
+          value: "336h"  # 14 days = 336 hours
+        - name: TSDB_BLOCK_RANGES
+          value: "2h,24h,7d,30d"
+        - name: TSDB_WAL_FLUSH_INTERVAL
+          value: "30s"
+        - name: TSDB_MAX_ACTIVE_SERIES
+          value: "500000"
+        - name: CLOUD_PROVIDER
+          value: "aws"  # aws, gcp, azure, static
+        - name: PRICING_CONFIGMAP
+          value: "storage-pricing"
+        - name: LEADER_ELECTION_NAMESPACE
+          value: "cost-management"
+        - name: LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "4Gi"
+          limits:
+            cpu: "2000m"
+            memory: "8Gi"
+        volumeMounts:
+        - name: tsdb-data
+          mountPath: /data/tsdb
+        - name: config
+          mountPath: /config
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http-api
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http-api
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      # Snapshotter sidecar for TSDB backup to S3
+      - name: snapshotter
+        image: ghcr.io/yourorg/kube-native-finops/snapshotter:v0.1.0
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: TSDB_DATA_DIR
+          value: "/data/tsdb"
+        - name: SNAPSHOT_INTERVAL
+          value: "6h"
+        - name: S3_BUCKET
+          value: "finops-tsdb-snapshots"
+        - name: S3_PREFIX
+          value: "cluster-name/"
+        - name: AWS_REGION
+          value: "us-east-1"
+        - name: RETENTION_LOCAL_HOURS
+          value: "24"
+        volumeMounts:
+        - name: tsdb-data
+          mountPath: /data/tsdb
+          readOnly: true
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+      volumes:
+      - name: config
+        configMap:
+          name: cost-controller-config
+  volumeClaimTemplates:
+  - metadata:
+      name: tsdb-data
+      labels:
+        app: cost-controller
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "gp3"  # SSD storage class
+      resources:
+        requests:
+          storage: 500Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cost-controller
+  namespace: cost-management
+  labels:
+    app: cost-controller
+spec:
+  ports:
+  - port: 8080
+    targetPort: http-api
+    name: http-api
+  - port: 8081
+    targetPort: grpc-wal
+    name: grpc-wal
+  - port: 9090
+    targetPort: metrics
+    name: metrics
+  clusterIP: None
+  selector:
+    app: cost-controller
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cost-controller-api
+  namespace: cost-management
+  labels:
+    app: cost-controller
+spec:
+  ports:
+  - port: 8080
+    targetPort: http-api
+    name: http-api
+  selector:
+    app: cost-controller
+    statefulset.kubernetes.io/pod-name: cost-controller-0  # Only leader serves API

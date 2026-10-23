@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/part-of: kube-native-finops
+    app.kubernetes.io/version: "2.13.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-state-metrics
+        app.kubernetes.io/part-of: kube-native-finops
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: kube-state-metrics
+      containers:
+        - name: kube-state-metrics
+          image: quay.io/prometheus/kube-state-metrics:v2.13.0
+          args:
+            - --metric-allowlist=kube_pod_container_resource_requests,kube_pod_container_resource_limits,kube_pod_container_resource_usage,kube_pod_status_phase,kube_pod_status_ready,kube_pod_info,kube_pod_labels,kube_pod_owner,kube_node_status_capacity,kube_node_status_allocatable,kube_node_labels,kube_namespace_labels,kube_persistentvolume_info,kube_persistentvolumeclaim_info
+            - --label-allowlist=app,version,cost-center,team
+            - --namespace-label-allowlist=cost-center,team,env
+            - --metric-labels-allowlist=kube_pod_labels=app,version,cost-center,team,kube_namespace_labels=cost-center,team,env
+            - --port=8080
+            - --telemetry-port=8081
+            - --host=0.0.0.0
+          ports:
+            - name: http-metrics
+              containerPort: 8080
+            - name: telemetry
+              containerPort: 8081
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/part-of: kube-native-finops
+spec:
+  ports:
+    - name: http-metrics
+      port: 8080
+      targetPort: 8080
+    - name: telemetry
+      port: 8081
+      targetPort: 8081
+  selector:
+    app.kubernetes.io/name: kube-state-metrics
+  type: ClusterIP

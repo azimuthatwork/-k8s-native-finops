@@ -374,11 +374,14 @@ import (
 
 // QueryAPI handles PromQL-compatible query endpoints.
 type QueryAPI struct {
-	querier     storage.Querier
-	engine      *promql.Engine
-	reg         *prometheus.Registry
-	queryTimeout time.Duration
-	maxSamples  int
+	querier       storage.Querier
+	engine        *promql.Engine
+	reg           *prometheus.Registry
+	queryTimeout  time.Duration
+	maxSamples    int
+	maxTimeout    time.Duration // Maximum allowed timeout
+	minTimeout    time.Duration // Minimum allowed timeout
+	defaultTimeout time.Duration // Default timeout when not specified
 }
 
 // QueryResponse represents the standard Prometheus API response format.
@@ -401,11 +404,14 @@ func NewQueryAPI(querier storage.Querier, reg *prometheus.Registry) *QueryAPI {
 	})
 
 	return &QueryAPI{
-		querier:      querier,
-		engine:       engine,
-		reg:          reg,
-		queryTimeout: 2 * time.Minute,
-		maxSamples:   50000000,
+		querier:         querier,
+		engine:          engine,
+		reg:             reg,
+		queryTimeout:    2 * time.Minute,
+		maxSamples:      50000000,
+		maxTimeout:      5 * time.Minute,
+		minTimeout:      1 * time.Second,
+		defaultTimeout:  2 * time.Minute,
 	}
 }
 
@@ -434,7 +440,7 @@ func (q *QueryAPI) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	timeoutParam := r.URL.Query().Get("timeout")
-	timeout := q.queryTimeout
+	timeout := q.defaultTimeout
 	if timeoutParam != "" {
 		t, err := parseDuration(timeoutParam)
 		if err != nil {
@@ -444,13 +450,33 @@ func (q *QueryAPI) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		timeout = t
 	}
 
+	// Validate timeout bounds
+	if timeout > q.maxTimeout {
+		timeout = q.maxTimeout
+	}
+	if timeout < q.minTimeout {
+		timeout = q.minTimeout
+	}
+
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	// Handle client disconnect - cancel query if client closes connection
+	ctx = q.withClientDisconnect(ctx, r)
+
 	// Execute instant query
 	result, err := q.engine.Query(ctx, q.querier, query, ts)
 	if err != nil {
+		// Check if error is due to context cancellation
+		if ctx.Err() == context.DeadlineExceeded {
+			q.respondError(w, http.StatusGatewayTimeout, "ERR_TIMEOUT", "query timed out")
+			return
+		}
+		if ctx.Err() == context.Canceled {
+			// Client disconnected, log but don't return error to client
+			return
+		}
 		q.respondError(w, http.StatusInternalServerError, "ERR_EXEC", err.Error())
 		return
 	}
@@ -507,7 +533,7 @@ func (q *QueryAPI) HandleQueryRange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	timeoutParam := r.URL.Query().Get("timeout")
-	timeout := q.queryTimeout
+	timeout := q.defaultTimeout
 	if timeoutParam != "" {
 		t, err := parseDuration(timeoutParam)
 		if err != nil {
@@ -517,13 +543,33 @@ func (q *QueryAPI) HandleQueryRange(w http.ResponseWriter, r *http.Request) {
 		timeout = t
 	}
 
+	// Validate timeout bounds
+	if timeout > q.maxTimeout {
+		timeout = q.maxTimeout
+	}
+	if timeout < q.minTimeout {
+		timeout = q.minTimeout
+	}
+
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	// Handle client disconnect - cancel query if client closes connection
+	ctx = q.withClientDisconnect(ctx, r)
+
 	// Execute range query
 	result, err := q.engine.QueryRange(ctx, q.querier, query, start, end, step)
 	if err != nil {
+		// Check if error is due to context cancellation
+		if ctx.Err() == context.DeadlineExceeded {
+			q.respondError(w, http.StatusGatewayTimeout, "ERR_TIMEOUT", "query timed out")
+			return
+		}
+		if ctx.Err() == context.Canceled {
+			// Client disconnected, log but don't return error to client
+			return
+		}
 		q.respondError(w, http.StatusInternalServerError, "ERR_EXEC", err.Error())
 		return
 	}
@@ -579,12 +625,22 @@ func (q *QueryAPI) HandleSeries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create context with timeout
-	ctx, cancel := context.WithTimeout(ctx, q.queryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, q.defaultTimeout)
 	defer cancel()
+
+	// Handle client disconnect
+	ctx = q.withClientDisconnect(ctx, r)
 
 	// Query series
 	seriesSet, err := q.querier.Select(ctx, false, nil, matchers...)
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			q.respondError(w, http.StatusGatewayTimeout, "ERR_TIMEOUT", "query timed out")
+			return
+		}
+		if ctx.Err() == context.Canceled {
+			return
+		}
 		q.respondError(w, http.StatusInternalServerError, "ERR_EXEC", err.Error())
 		return
 	}
@@ -596,6 +652,13 @@ func (q *QueryAPI) HandleSeries(w http.ResponseWriter, r *http.Request) {
 		series = append(series, seriesSet.At().Labels().Map())
 	}
 	if err := seriesSet.Err(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			q.respondError(w, http.StatusGatewayTimeout, "ERR_TIMEOUT", "query timed out")
+			return
+		}
+		if ctx.Err() == context.Canceled {
+			return
+		}
 		q.respondError(w, http.StatusInternalServerError, "ERR_EXEC", err.Error())
 		return
 	}
@@ -644,12 +707,22 @@ func (q *QueryAPI) HandleLabels(w http.ResponseWriter, r *http.Request) {
 		matchers = append(matchers, matcher...)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, q.queryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, q.defaultTimeout)
 	defer cancel()
+
+	// Handle client disconnect
+	ctx = q.withClientDisconnect(ctx, r)
 
 	// Get label names
 	labelNames, err := q.querier.LabelNames(ctx, start, end, matchers...)
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			q.respondError(w, http.StatusGatewayTimeout, "ERR_TIMEOUT", "query timed out")
+			return
+		}
+		if ctx.Err() == context.Canceled {
+			return
+		}
 		q.respondError(w, http.StatusInternalServerError, "ERR_EXEC", err.Error())
 		return
 	}
@@ -708,12 +781,22 @@ func (q *QueryAPI) HandleLabelValues(w http.ResponseWriter, r *http.Request) {
 		matchers = append(matchers, matcher...)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, q.queryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, q.defaultTimeout)
 	defer cancel()
+
+	// Handle client disconnect
+	ctx = q.withClientDisconnect(ctx, r)
 
 	// Get label values
 	labelValues, err := q.querier.LabelValues(ctx, labelName, start, end, matchers...)
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			q.respondError(w, http.StatusGatewayTimeout, "ERR_TIMEOUT", "query timed out")
+			return
+		}
+		if ctx.Err() == context.Canceled {
+			return
+		}
 		q.respondError(w, http.StatusInternalServerError, "ERR_EXEC", err.Error())
 		return
 	}
@@ -740,6 +823,21 @@ func (q *QueryAPI) respondError(w http.ResponseWriter, statusCode int, errorType
 		ErrorType: errorType,
 		Error:     message,
 	})
+}
+
+// GetQueryTimeout returns the current default query timeout.
+func (q *QueryAPI) GetQueryTimeout() time.Duration {
+	return q.defaultTimeout
+}
+
+// GetMaxTimeout returns the maximum allowed query timeout.
+func (q *QueryAPI) GetMaxTimeout() time.Duration {
+	return q.maxTimeout
+}
+
+// GetMinTimeout returns the minimum allowed query timeout.
+func (q *QueryAPI) GetMinTimeout() time.Duration {
+	return q.minTimeout
 }
 
 // parseTime parses a time parameter (Unix timestamp or RFC3339).
@@ -775,7 +873,17 @@ func (q *QueryAPI) GetEngine() *promql.Engine {
 
 // SetQueryTimeout sets the default query timeout.
 func (q *QueryAPI) SetQueryTimeout(timeout time.Duration) {
-	q.queryTimeout = timeout
+	q.defaultTimeout = timeout
+}
+
+// SetMaxTimeout sets the maximum allowed query timeout.
+func (q *QueryAPI) SetMaxTimeout(timeout time.Duration) {
+	q.maxTimeout = timeout
+}
+
+// SetMinTimeout sets the minimum allowed query timeout.
+func (q *QueryAPI) SetMinTimeout(timeout time.Duration) {
+	q.minTimeout = timeout
 }
 
 // SetMaxSamples sets the maximum samples per query.
@@ -783,19 +891,49 @@ func (q *QueryAPI) SetMaxSamples(maxSamples int) {
 	q.maxSamples = maxSamples
 	q.engine = promql.NewEngine(promql.EngineOpts{
 		MaxSamples:    maxSamples,
-		Timeout:       q.queryTimeout,
+		Timeout:       q.defaultTimeout,
 		Reg:           q.reg,
 		LookbackDelta: 5 * time.Minute,
 	})
 }
 
+// withClientDisconnect returns a context that is canceled when the client disconnects.
+func (q *QueryAPI) withClientDisconnect(ctx context.Context, r *http.Request) context.Context {
+	// Create a new context that will be canceled when the client disconnects
+	clientCtx, cancel := context.WithCancel(ctx)
+	
+	// Detect client disconnect via CloseNotifier (for HTTP/1.1) or Request.Context() (for HTTP/2)
+	// For HTTP/2, the request context is already canceled when client disconnects
+	// For HTTP/1.1, we use CloseNotifier
+	if notifier, ok := w.(http.CloseNotifier); ok {
+		go func() {
+			select {
+			case <-notifier.CloseNotify():
+				cancel()
+			case <-ctx.Done():
+				// Original context canceled, stop watching
+			}
+		}()
+	} else {
+		// For HTTP/2, the request context handles cancellation
+		go func() {
+			<-r.Context().Done()
+			cancel()
+		}()
+	}
+	
+	return clientCtx
+}
+
 // QueryMetrics returns metrics about query execution.
 type QueryMetrics struct {
-	TotalQueries      prometheus.Counter
-	FailedQueries     prometheus.Counter
-	QueryDuration     prometheus.Histogram
-	QuerySamples      prometheus.Histogram
-	ConcurrentQueries prometheus.Gauge
+	TotalQueries       prometheus.Counter
+	FailedQueries      prometheus.Counter
+	TimeoutQueries     prometheus.Counter
+	CanceledQueries    prometheus.Counter
+	QueryDuration      prometheus.Histogram
+	QuerySamples       prometheus.Histogram
+	ConcurrentQueries  prometheus.Gauge
 }
 
 // NewQueryMetrics creates query metrics.
@@ -808,6 +946,14 @@ func NewQueryMetrics(reg *prometheus.Registry) *QueryMetrics {
 		FailedQueries: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "finops_query_failed_total",
 			Help: "Total number of failed queries",
+		}),
+		TimeoutQueries: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "finops_query_timeout_total",
+			Help: "Total number of queries that timed out",
+		}),
+		CanceledQueries: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "finops_query_canceled_total",
+			Help: "Total number of queries canceled due to client disconnect",
 		}),
 		QueryDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name:    "finops_query_duration_seconds",
@@ -827,6 +973,8 @@ func NewQueryMetrics(reg *prometheus.Registry) *QueryMetrics {
 	reg.MustRegister(
 		m.TotalQueries,
 		m.FailedQueries,
+		m.TimeoutQueries,
+		m.CanceledQueries,
 		m.QueryDuration,
 		m.QuerySamples,
 		m.ConcurrentQueries,
@@ -866,6 +1014,14 @@ func (w *WrappedQueryAPI) HandleQuery(wr http.ResponseWriter, r *http.Request) {
 	
 	if rec.statusCode >= 400 {
 		w.metrics.FailedQueries.Inc()
+		if rec.statusCode == http.StatusGatewayTimeout {
+			w.metrics.TimeoutQueries.Inc()
+		}
+	}
+	
+	// Check if context was canceled (client disconnect)
+	if r.Context().Err() == context.Canceled {
+		w.metrics.CanceledQueries.Inc()
 	}
 }
 
@@ -886,6 +1042,14 @@ func (w *WrappedQueryAPI) HandleQueryRange(wr http.ResponseWriter, r *http.Reque
 	
 	if rec.statusCode >= 400 {
 		w.metrics.FailedQueries.Inc()
+		if rec.statusCode == http.StatusGatewayTimeout {
+			w.metrics.TimeoutQueries.Inc()
+		}
+	}
+	
+	// Check if context was canceled (client disconnect)
+	if r.Context().Err() == context.Canceled {
+		w.metrics.CanceledQueries.Inc()
 	}
 }
 
@@ -898,6 +1062,22 @@ type responseRecorder struct {
 func (r *responseRecorder) WriteHeader(code int) {
 	r.statusCode = code
 	r.ResponseWriter.WriteHeader(code)
+}
+
+// QueryTimeoutConfig holds timeout configuration for the query API.
+type QueryTimeoutConfig struct {
+	DefaultTimeout time.Duration `json:"default_timeout"`
+	MaxTimeout     time.Duration `json:"max_timeout"`
+	MinTimeout     time.Duration `json:"min_timeout"`
+}
+
+// GetTimeoutConfig returns the current timeout configuration.
+func (q *QueryAPI) GetTimeoutConfig() QueryTimeoutConfig {
+	return QueryTimeoutConfig{
+		DefaultTimeout: q.defaultTimeout,
+		MaxTimeout:     q.maxTimeout,
+		MinTimeout:     q.minTimeout,
+	}
 }
 
 // PrecompileQuery pre-compiles a query for faster repeated execution.

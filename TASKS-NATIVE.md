@@ -327,8 +327,8 @@ This document breaks down the **PLAN-NATIVE.md** into granular, trackable tasks 
   - [x] Added slow query logging to all endpoints: `/query`, `/query_range`, `/series`, `/labels`, `/label/<name>/values`
   - [x] Logs include: endpoint, duration, threshold, query (truncated), remote address, user agent
   - [x] Added `SetSlowQueryThreshold`, `GetSlowQueryThreshold`, `SetLogger` methods
-  - [x] Added `SlowQueryConfig` and `ApplySlowQueryConfig` for structured configuration
-- [ ] **Task 2.2.4:** Add Response Caching (Redis or In-Memory) for Dashboard Overview
+  - [x] Added `SlowQueryConfig` and `ApplySlowQueryConfig` for structured configuration  
+  - [x] **Task 2.2.4:** Add Response Caching (Redis or In-Memory) for Dashboard Overview
 
 ### 2.3 Long-Term Export (Parquet to S3)
 - [ ] **Task 2.3.1:** Create `cost-exporter` CronJob (`cmd/exporter/main.go`)

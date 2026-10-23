@@ -322,7 +322,12 @@ This document breaks down the **PLAN-NATIVE.md** into granular, trackable tasks 
   - [x] Context cancellation on client disconnect (HTTP/1.1 CloseNotifier + HTTP/2 Request.Context)
   - [x] Proper error responses: 504 Gateway Timeout for timeout, silent return for client cancellation
   - [x] Applied to all endpoints: `/query`, `/query_range`, `/series`, `/labels`, `/label/<name>/values`
-- [ ] **Task 2.2.3:** Implement Query Logging (Slow query > 5s)
+- [x] **Task 2.2.3:** Implement Query Logging (Slow query > 5s)
+  - [x] Added configurable slow query threshold (default 5 seconds)
+  - [x] Added slow query logging to all endpoints: `/query`, `/query_range`, `/series`, `/labels`, `/label/<name>/values`
+  - [x] Logs include: endpoint, duration, threshold, query (truncated), remote address, user agent
+  - [x] Added `SetSlowQueryThreshold`, `GetSlowQueryThreshold`, `SetLogger` methods
+  - [x] Added `SlowQueryConfig` and `ApplySlowQueryConfig` for structured configuration
 - [ ] **Task 2.2.4:** Add Response Caching (Redis or In-Memory) for Dashboard Overview
 
 ### 2.3 Long-Term Export (Parquet to S3)

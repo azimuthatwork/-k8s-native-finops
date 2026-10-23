@@ -360,6 +360,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -374,14 +375,16 @@ import (
 
 // QueryAPI handles PromQL-compatible query endpoints.
 type QueryAPI struct {
-	querier       storage.Querier
-	engine        *promql.Engine
-	reg           *prometheus.Registry
-	queryTimeout  time.Duration
-	maxSamples    int
-	maxTimeout    time.Duration // Maximum allowed timeout
-	minTimeout    time.Duration // Minimum allowed timeout
-	defaultTimeout time.Duration // Default timeout when not specified
+	querier           storage.Querier
+	engine            *promql.Engine
+	reg               *prometheus.Registry
+	queryTimeout      time.Duration
+	maxSamples        int
+	maxTimeout        time.Duration // Maximum allowed timeout
+	minTimeout        time.Duration // Minimum allowed timeout
+	defaultTimeout    time.Duration // Default timeout when not specified
+	slowQueryThreshold time.Duration // Threshold for slow query logging
+	logger            *log.Logger   // Logger for slow queries
 }
 
 // QueryResponse represents the standard Prometheus API response format.
@@ -404,19 +407,22 @@ func NewQueryAPI(querier storage.Querier, reg *prometheus.Registry) *QueryAPI {
 	})
 
 	return &QueryAPI{
-		querier:         querier,
-		engine:          engine,
-		reg:             reg,
-		queryTimeout:    2 * time.Minute,
-		maxSamples:      50000000,
-		maxTimeout:      5 * time.Minute,
-		minTimeout:      1 * time.Second,
-		defaultTimeout:  2 * time.Minute,
+		querier:            querier,
+		engine:             engine,
+		reg:                reg,
+		queryTimeout:       2 * time.Minute,
+		maxSamples:         50000000,
+		maxTimeout:         5 * time.Minute,
+		minTimeout:         1 * time.Second,
+		defaultTimeout:     2 * time.Minute,
+		slowQueryThreshold: 5 * time.Second, // Default 5 seconds
+		logger:             log.Default(),
 	}
 }
 
 // HandleQuery handles instant queries (GET /api/v1/query).
 func (q *QueryAPI) HandleQuery(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	ctx := r.Context()
 	
 	// Parse query parameters
@@ -482,10 +488,14 @@ func (q *QueryAPI) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q.respondSuccess(w, result)
+	
+	// Log slow query
+	q.logSlowQuery("instant", query, startTime, r)
 }
 
 // HandleQueryRange handles range queries (GET /api/v1/query_range).
 func (q *QueryAPI) HandleQueryRange(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	ctx := r.Context()
 
 	// Parse query parameters
@@ -575,10 +585,14 @@ func (q *QueryAPI) HandleQueryRange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q.respondSuccess(w, result)
+	
+	// Log slow query
+	q.logSlowQuery("range", query, startTime, r)
 }
 
 // HandleSeries handles series discovery (GET /api/v1/series).
 func (q *QueryAPI) HandleSeries(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	ctx := r.Context()
 
 	matchParams := r.URL.Query()["match[]"]
@@ -684,10 +698,14 @@ func (q *QueryAPI) HandleSeries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q.respondSuccess(w, series)
+	
+	// Log slow query
+	q.logSlowQuery("series", matchParams[0], startTime, r)
 }
 
 // HandleLabels handles label names discovery (GET /api/v1/labels).
 func (q *QueryAPI) HandleLabels(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	ctx := r.Context()
 
 	startParam := r.URL.Query().Get("start")
@@ -768,10 +786,14 @@ func (q *QueryAPI) HandleLabels(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q.respondSuccess(w, labelNames)
+	
+	// Log slow query
+	q.logSlowQuery("labels", "", startTime, r)
 }
 
 // HandleLabelValues handles label values discovery (GET /api/v1/label/<name>/values).
 func (q *QueryAPI) HandleLabelValues(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	ctx := r.Context()
 
 	// Extract label name from URL path
@@ -862,6 +884,31 @@ func (q *QueryAPI) HandleLabelValues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q.respondSuccess(w, labelValues)
+	
+	// Log slow query
+	q.logSlowQuery("label_values", labelName, startTime, r)
+}
+
+// logSlowQuery logs a warning if the query execution time exceeds the threshold.
+func (q *QueryAPI) logSlowQuery(endpoint, query string, startTime time.Time, r *http.Request) {
+	duration := time.Since(startTime)
+	if duration > q.slowQueryThreshold {
+		// Truncate query for logging if too long
+		logQuery := query
+		if len(logQuery) > 200 {
+			logQuery = logQuery[:200] + "..."
+		}
+		
+		q.logger.Printf(
+			"SLOW QUERY: endpoint=%s duration=%v threshold=%v query=%s remote_addr=%s user_agent=%s",
+			endpoint,
+			duration.Round(time.Millisecond),
+			q.slowQueryThreshold.Round(time.Millisecond),
+			logQuery,
+			r.RemoteAddr,
+			r.UserAgent(),
+		)
+	}
 }
 
 // respondSuccess writes a successful response.
@@ -898,6 +945,21 @@ func (q *QueryAPI) GetMaxTimeout() time.Duration {
 // GetMinTimeout returns the minimum allowed query timeout.
 func (q *QueryAPI) GetMinTimeout() time.Duration {
 	return q.minTimeout
+}
+
+// GetSlowQueryThreshold returns the current slow query threshold.
+func (q *QueryAPI) GetSlowQueryThreshold() time.Duration {
+	return q.slowQueryThreshold
+}
+
+// SetSlowQueryThreshold sets the slow query logging threshold.
+func (q *QueryAPI) SetSlowQueryThreshold(threshold time.Duration) {
+	q.slowQueryThreshold = threshold
+}
+
+// SetLogger sets the logger for slow query logging.
+func (q *QueryAPI) SetLogger(logger *log.Logger) {
+	q.logger = logger
 }
 
 // parseTime parses a time parameter (Unix timestamp or RFC3339).
@@ -1048,6 +1110,63 @@ type WrappedQueryAPI struct {
 	metrics *QueryMetrics
 }
 
+// HandleQuery wraps the instant query handler with metrics.
+func (w *WrappedQueryAPI) HandleQuery(wr http.ResponseWriter, r *http.Request) {
+	w.metrics.TotalQueries.Inc()
+	w.metrics.ConcurrentQueries.Inc()
+	defer w.metrics.ConcurrentQueries.Dec()
+
+	start := time.Now()
+	
+	// Capture response
+	rec := &responseRecorder{ResponseWriter: wr, statusCode: http.StatusOK}
+	
+	w.QueryAPI.HandleQuery(rec, r)
+	
+	duration := time.Since(start)
+	w.metrics.QueryDuration.Observe(duration.Seconds())
+	
+	if rec.statusCode >= 400 {
+		w.metrics.FailedQueries.Inc()
+		if rec.statusCode == http.StatusGatewayTimeout {
+			w.metrics.TimeoutQueries.Inc()
+		}
+	}
+	
+	// Check if context was canceled (client disconnect)
+	if r.Context().Err() == context.Canceled {
+		w.metrics.CanceledQueries.Inc()
+	}
+}
+
+// HandleQueryRange wraps the range query handler with metrics.
+func (w *WrappedQueryAPI) HandleQueryRange(wr http.ResponseWriter, r *http.Request) {
+	w.metrics.TotalQueries.Inc()
+	w.metrics.ConcurrentQueries.Inc()
+	defer w.metrics.ConcurrentQueries.Dec()
+
+	start := time.Now()
+	
+	rec := &responseRecorder{ResponseWriter: wr, statusCode: http.StatusOK}
+	
+	w.QueryAPI.HandleQueryRange(rec, r)
+	
+	duration := time.Since(start)
+	w.metrics.QueryDuration.Observe(duration.Seconds())
+	
+	if rec.statusCode >= 400 {
+		w.metrics.FailedQueries.Inc()
+		if rec.statusCode == http.StatusGatewayTimeout {
+			w.metrics.TimeoutQueries.Inc()
+		}
+	}
+	
+	// Check if context was canceled (client disconnect)
+	if r.Context().Err() == context.Canceled {
+		w.metrics.CanceledQueries.Inc()
+	}
+}
+
 // NewWrappedQueryAPI creates a QueryAPI with metrics.
 func NewWrappedQueryAPI(querier storage.Querier, reg *prometheus.Registry) *WrappedQueryAPI {
 	return &WrappedQueryAPI{
@@ -1124,19 +1243,48 @@ func (r *responseRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
+// SlowQueryConfig holds configuration for slow query logging.
+type SlowQueryConfig struct {
+	Enabled         bool          `json:"enabled"`
+	Threshold       time.Duration `json:"threshold"`
+	LogLevel        string        `json:"log_level"` // "warn", "info", "debug"
+	MaxQueryLength  int           `json:"max_query_length"`
+}
+
+// DefaultSlowQueryConfig returns the default slow query configuration.
+func DefaultSlowQueryConfig() SlowQueryConfig {
+	return SlowQueryConfig{
+		Enabled:        true,
+		Threshold:      5 * time.Second,
+		LogLevel:       "warn",
+		MaxQueryLength: 200,
+	}
+}
+
+// ApplySlowQueryConfig applies slow query configuration to the QueryAPI.
+func (q *QueryAPI) ApplySlowQueryConfig(cfg SlowQueryConfig) {
+	if cfg.Enabled {
+		q.SetSlowQueryThreshold(cfg.Threshold)
+	} else {
+		q.SetSlowQueryThreshold(0) // Disable by setting to 0
+	}
+}
+
 // QueryTimeoutConfig holds timeout configuration for the query API.
 type QueryTimeoutConfig struct {
-	DefaultTimeout time.Duration `json:"default_timeout"`
-	MaxTimeout     time.Duration `json:"max_timeout"`
-	MinTimeout     time.Duration `json:"min_timeout"`
+	DefaultTimeout      time.Duration `json:"default_timeout"`
+	MaxTimeout          time.Duration `json:"max_timeout"`
+	MinTimeout          time.Duration `json:"min_timeout"`
+	SlowQueryThreshold  time.Duration `json:"slow_query_threshold"`
 }
 
 // GetTimeoutConfig returns the current timeout configuration.
 func (q *QueryAPI) GetTimeoutConfig() QueryTimeoutConfig {
 	return QueryTimeoutConfig{
-		DefaultTimeout: q.defaultTimeout,
-		MaxTimeout:     q.maxTimeout,
-		MinTimeout:     q.minTimeout,
+		DefaultTimeout:     q.defaultTimeout,
+		MaxTimeout:         q.maxTimeout,
+		MinTimeout:         q.minTimeout,
+		SlowQueryThreshold: q.slowQueryThreshold,
 	}
 }
 

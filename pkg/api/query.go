@@ -463,7 +463,7 @@ func (q *QueryAPI) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Handle client disconnect - cancel query if client closes connection
-	ctx = q.withClientDisconnect(ctx, r)
+	ctx = q.withClientDisconnect(ctx, r, w)
 
 	// Execute instant query
 	result, err := q.engine.Query(ctx, q.querier, query, ts)
@@ -556,7 +556,7 @@ func (q *QueryAPI) HandleQueryRange(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Handle client disconnect - cancel query if client closes connection
-	ctx = q.withClientDisconnect(ctx, r)
+	ctx = q.withClientDisconnect(ctx, r, w)
 
 	// Execute range query
 	result, err := q.engine.QueryRange(ctx, q.querier, query, start, end, step)
@@ -624,12 +624,32 @@ func (q *QueryAPI) HandleSeries(w http.ResponseWriter, r *http.Request) {
 		matchers = append(matchers, matcher...)
 	}
 
+	// Parse timeout parameter
+	timeoutParam := r.URL.Query().Get("timeout")
+	timeout := q.defaultTimeout
+	if timeoutParam != "" {
+		t, err := parseDuration(timeoutParam)
+		if err != nil {
+			q.respondError(w, http.StatusBadRequest, "ERR_INVALID_PARAM", fmt.Sprintf("invalid timeout parameter: %v", err))
+			return
+		}
+		timeout = t
+	}
+
+	// Validate timeout bounds
+	if timeout > q.maxTimeout {
+		timeout = q.maxTimeout
+	}
+	if timeout < q.minTimeout {
+		timeout = q.minTimeout
+	}
+
 	// Create context with timeout
-	ctx, cancel := context.WithTimeout(ctx, q.defaultTimeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Handle client disconnect
-	ctx = q.withClientDisconnect(ctx, r)
+	ctx = q.withClientDisconnect(ctx, r, w)
 
 	// Query series
 	seriesSet, err := q.querier.Select(ctx, false, nil, matchers...)
@@ -707,11 +727,31 @@ func (q *QueryAPI) HandleLabels(w http.ResponseWriter, r *http.Request) {
 		matchers = append(matchers, matcher...)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, q.defaultTimeout)
+	// Parse timeout parameter
+	timeoutParam := r.URL.Query().Get("timeout")
+	timeout := q.defaultTimeout
+	if timeoutParam != "" {
+		t, err := parseDuration(timeoutParam)
+		if err != nil {
+			q.respondError(w, http.StatusBadRequest, "ERR_INVALID_PARAM", fmt.Sprintf("invalid timeout parameter: %v", err))
+			return
+		}
+		timeout = t
+	}
+
+	// Validate timeout bounds
+	if timeout > q.maxTimeout {
+		timeout = q.maxTimeout
+	}
+	if timeout < q.minTimeout {
+		timeout = q.minTimeout
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Handle client disconnect
-	ctx = q.withClientDisconnect(ctx, r)
+	ctx = q.withClientDisconnect(ctx, r, w)
 
 	// Get label names
 	labelNames, err := q.querier.LabelNames(ctx, start, end, matchers...)
@@ -781,11 +821,31 @@ func (q *QueryAPI) HandleLabelValues(w http.ResponseWriter, r *http.Request) {
 		matchers = append(matchers, matcher...)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, q.defaultTimeout)
+	// Parse timeout parameter
+	timeoutParam := r.URL.Query().Get("timeout")
+	timeout := q.defaultTimeout
+	if timeoutParam != "" {
+		t, err := parseDuration(timeoutParam)
+		if err != nil {
+			q.respondError(w, http.StatusBadRequest, "ERR_INVALID_PARAM", fmt.Sprintf("invalid timeout parameter: %v", err))
+			return
+		}
+		timeout = t
+	}
+
+	// Validate timeout bounds
+	if timeout > q.maxTimeout {
+		timeout = q.maxTimeout
+	}
+	if timeout < q.minTimeout {
+		timeout = q.minTimeout
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Handle client disconnect
-	ctx = q.withClientDisconnect(ctx, r)
+	ctx = q.withClientDisconnect(ctx, r, w)
 
 	// Get label values
 	labelValues, err := q.querier.LabelValues(ctx, labelName, start, end, matchers...)
@@ -898,7 +958,7 @@ func (q *QueryAPI) SetMaxSamples(maxSamples int) {
 }
 
 // withClientDisconnect returns a context that is canceled when the client disconnects.
-func (q *QueryAPI) withClientDisconnect(ctx context.Context, r *http.Request) context.Context {
+func (q *QueryAPI) withClientDisconnect(ctx context.Context, r *http.Request, w http.ResponseWriter) context.Context {
 	// Create a new context that will be canceled when the client disconnects
 	clientCtx, cancel := context.WithCancel(ctx)
 	

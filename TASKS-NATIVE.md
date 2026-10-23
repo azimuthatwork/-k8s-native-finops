@@ -313,9 +313,9 @@ This document breaks down the **PLAN-NATIVE.md** into granular, trackable tasks 
   - [x] Series discovery (`/api/v1/series`) < 1s
 
 ### 2.2 Query API Hardening (`pkg/api/query.go`)
-- [ ] **Task 2.2.1:** Implement PromQL Engine (`prometheus/promql`)
-  - [ ] Support: Vector selectors, `rate()`, `sum()`, `topk()`, `histogram_quantile()`
-  - [ ] Support: `@` modifier (offset), `[range]` vectors
+- [x] **Task 2.2.1:** Implement PromQL Engine (`prometheus/promql`)
+  - [x] Support: Vector selectors, `rate()`, `sum()`, `topk()`, `histogram_quantile()`
+  - [x] Support: `@` modifier (offset), `[range]` vectors
 - [ ] **Task 2.2.2:** Add Query Timeout & Cancellation (Context)
 - [ ] **Task 2.2.3:** Implement Query Logging (Slow query > 5s)
 - [ ] **Task 2.2.4:** Add Response Caching (Redis or In-Memory) for Dashboard Overview
@@ -690,6 +690,9 @@ chmod +x scripts/validate-query-performance.sh
 
 # Or use Go version
 go run scripts/validate-query-performance.go -namespace cost-management -pod cost-controller-0
+
+# PromQL Engine Validation (Task 2.2.1)
+go run scripts/validate-promql-engine.go -namespace cost-management -pod cost-controller-0
 
 # Full Phase 2 Validation
 chmod +x scripts/validate-native-phase2.sh

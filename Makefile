@@ -1,7 +1,9 @@
 # Phase 0 Native Makefile
 # Usage: make -f native/Makefile <target>
 
-.PHONY: help apply validate clean deploy-ksm deploy-metrics-server deploy-node-exporter deploy-rbac deploy-crds deploy-examples
+GO ?= go
+
+.PHONY: help apply validate clean deploy-ksm deploy-metrics-server deploy-node-exporter deploy-rbac deploy-crds deploy-examples build-exporter
 
 # Default target
 help:
@@ -54,6 +56,11 @@ deploy-examples:
 # View report
 report:
 	@if [ -f docs/phase0-native-report.md ]; then cat docs/phase0-native-report.md; else echo "Report not found. Run 'make validate' first."; fi
+
+# Build targets
+build-exporter:
+	@echo "Building Cost Exporter..."
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -a -o bin/exporter ./cmd/exporter
 
 # Check individual components
 check-ksm:

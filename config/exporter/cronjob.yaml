@@ -1,0 +1,99 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cost-exporter
+  namespace: cost-management
+  labels:
+    app: cost-exporter
+    component: exporter
+spec:
+  schedule: "0 2 * * *"  # Daily at 02:00 UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: cost-exporter-sa
+          restartPolicy: OnFailure
+          containers:
+          - name: exporter
+            image: ghcr.io/yourorg/kube-native-finops/cost-exporter:v0.1.0
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: TSDB_ENDPOINT
+              value: "http://cost-controller.cost-management.svc.cluster.local:8080"
+            - name: S3_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: cost-exporter-secrets
+                  key: s3-bucket
+            - name: S3_PREFIX
+              value: "cost/allocations"
+            - name: S3_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: cost-exporter-secrets
+                  key: s3-region
+            - name: S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: cost-exporter-secrets
+                  key: s3-endpoint
+                  optional: true
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cost-exporter-secrets
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cost-exporter-secrets
+                  key: aws-secret-access-key
+            - name: CLUSTER_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['topology.kubernetes.io/region']
+            - name: LOOKBACK_HOURS
+              value: "24"
+            - name: STEP
+              value: "1h"
+            - name: LOG_LEVEL
+              value: "info"
+            resources:
+              requests:
+                cpu: "100m"
+                memory: "256Mi"
+              limits:
+                cpu: "500m"
+                memory: "1Gi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cost-exporter-sa
+  namespace: cost-management
+  labels:
+    app: cost-exporter
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cost-exporter-secrets
+  namespace: cost-management
+  labels:
+    app: cost-exporter
+type: Opaque
+stringData:
+  # Fill in these values before applying
+  s3-bucket: "finops-bucket"
+  s3-region: "us-east-1"
+  s3-endpoint: ""  # Optional: for S3-compatible storage (MinIO, etc.)
+  aws-access-key-id: ""
+  aws-secret-access-key: ""

@@ -10,10 +10,13 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v4 v4.2.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/costmanagement/armcostmanagement v1.1.0
+	github.com/apache/arrow/go/v16 v16.1.0
 	github.com/aws/aws-sdk-go-v2 v1.24.0
 	github.com/aws/aws-sdk-go-v2/config v1.27.0
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.0
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.40.0
 	github.com/aws/aws-sdk-go-v2/service/pricing v1.19.0
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.38.0
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/go-logr/logr v1.3.0
 	github.com/go-logr/stdr v1.3.0

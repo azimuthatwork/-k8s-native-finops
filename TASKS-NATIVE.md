@@ -339,8 +339,12 @@ This document breaks down the **PLAN-NATIVE.md** into granular, trackable tasks 
   - [x] Write to `s3://finops-bucket/cost/allocations/`
   - [x] Created `cmd/exporter/Dockerfile` for container image
   - [x] Created `config/exporter/cronjob.yaml` with CronJob, ServiceAccount, and Secret template
-- [ ] **Task 2.3.2:** Define Parquet Schema (PyArrow compatible)
-  - [ ] Fields: `timestamp`, `cluster`, `namespace`, `workload`, `kind`, `cost_center`, `team`, `cpu_cores_requested`, `cpu_cores_used`, `memory_gib_requested`, `memory_gib_used`, `storage_gib_requested`, `storage_gib_used`, `compute_cost_usd`, `storage_cost_usd`, `network_cost_usd`, `shared_cost_usd`, `total_cost_usd`, `efficiency_pct`
+- [x] **Task 2.3.2:** Define Parquet Schema (PyArrow compatible)
+  - [x] Fields: `timestamp`, `cluster`, `namespace`, `workload`, `kind`, `cost_center`, `team`, `cpu_cores_requested`, `cpu_cores_used`, `memory_gib_requested`, `memory_gib_used`, `storage_gib_requested`, `storage_gib_used`, `compute_cost_usd`, `storage_cost_usd`, `network_cost_usd`, `shared_cost_usd`, `total_cost_usd`, `efficiency_pct`
+  - [x] Schema defined in `cmd/exporter/main.go` as `ParquetSchema` variable
+  - [x] Uses Apache Arrow Go types matching PyArrow schema
+  - [x] All fields properly typed (timestamp_us, string, float64)
+  - [x] Nullable fields: cost_center, team (others required)
 - [ ] **Task 2.3.3:** Validate Parquet Read (Athena/Trino/BigQuery external table)
 
 ---

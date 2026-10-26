@@ -5,7 +5,7 @@ go 1.22
 require (
 	cloud.google.com/go/billing/catalog/apiv1 v1.3.0
 	cloud.google.com/go/compute/metadata v0.2.3
-	cloud.google.com/go/compute/v1 v1.19.0
+	cloud.google.com/go/compute v1.19.0
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.12.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v4 v4.2.0
@@ -23,7 +23,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.12.0
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/common v0.47.0
-	github.com/prometheus/prometheus v2.52.0
+	github.com/prometheus/prometheus v0.52.0
 	github.com/prometheus/prometheus/model/labels v0.0.0-20240501120000-1234567890ab
 	github.com/prometheus/prometheus/prompb v0.0.0-20240501120000-1234567890ab
 	github.com/prometheus/prometheus/tsdb v0.15.0

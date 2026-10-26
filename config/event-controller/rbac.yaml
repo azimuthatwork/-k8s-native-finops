@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: event-controller-sa
+  namespace: cost-management
+  labels:
+    app.kubernetes.io/name: event-controller
+    app.kubernetes.io/part-of: kube-native-finops
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: event-controller-role
+  labels:
+    app.kubernetes.io/name: event-controller
+    app.kubernetes.io/part-of: kube-native-finops
+rules:
+# LogEvent CRD permissions
+- apiGroups: ["finops.io"]
+  resources: ["logevents", "logevents/status", "logevents/finalizers"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Kubernetes core resources for event watching
+- apiGroups: [""]
+  resources: ["events", "pods", "namespaces", "nodes"]
+  verbs: ["get", "list", "watch"]
+# Apps resources for workload owner resolution
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets", "replicasets", "jobs", "cronjobs"]
+  verbs: ["get", "list", "watch"]
+# Coordination for leader election
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: event-controller-rolebinding
+  labels:
+    app.kubernetes.io/name: event-controller
+    app.kubernetes.io/part-of: kube-native-finops
+subjects:
+- kind: ServiceAccount
+  name: event-controller-sa
+  namespace: cost-management
+roleRef:
+  kind: ClusterRole
+  name: event-controller-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: event-controller-leader-election
+  namespace: cost-management
+  labels:
+    app.kubernetes.io/name: event-controller
+    app.kubernetes.io/part-of: kube-native-finops
+rules:
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: event-controller-leader-election-binding
+  namespace: cost-management
+  labels:
+    app.kubernetes.io/name: event-controller
+    app.kubernetes.io/part-of: kube-native-finops
+subjects:
+- kind: ServiceAccount
+  name: event-controller-sa
+  namespace: cost-management
+roleRef:
+  kind: Role
+  name: event-controller-leader-election
+  apiGroup: rbac.authorization.k8s.io

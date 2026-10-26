@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: event-controller
+  namespace: cost-management
+  labels:
+    app.kubernetes.io/name: event-controller
+    app.kubernetes.io/part-of: kube-native-finops
+spec:
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+  - name: health
+    port: 8081
+    targetPort: 8081
+  selector:
+    app.kubernetes.io/name: event-controller

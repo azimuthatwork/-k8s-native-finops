@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-controller
+  namespace: cost-management
+  labels:
+    app.kubernetes.io/name: event-controller
+    app.kubernetes.io/part-of: kube-native-finops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: event-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: event-controller
+        app.kubernetes.io/part-of: kube-native-finops
+    spec:
+      serviceAccountName: event-controller-sa
+      containers:
+      - name: manager
+        image: ghcr.io/yourorg/kube-native-finops/event-controller:v0.1.0
+        command:
+        - /manager
+        - --metrics-bind-address=:8080
+        - --health-probe-bind-address=:8081
+        - --leader-elect=true
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        ports:
+        - containerPort: 8080
+          name: metrics
+        - containerPort: 8081
+          name: health
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      terminationGracePeriodSeconds: 30

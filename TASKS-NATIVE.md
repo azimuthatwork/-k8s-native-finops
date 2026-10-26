@@ -353,7 +353,7 @@ This document breaks down the **PLAN-NATIVE.md** into granular, trackable tasks 
 **Objective:** Detect OOM, Evictions, Throttling, Crashes without Loki.
 
 ### 3.1 Kubernetes Event Controller (`cmd/event-controller`)
-- [ ] **Task 3.1.1:** Scaffold Controller (`kubebuilder create api --group finops --version v1alpha1 --kind LogEvent`)
+- [x] **Task 3.1.1:** Scaffold Controller (`kubebuilder create api --group finops --version v1alpha1 --kind LogEvent`)
 - [ ] **Task 3.1.2:** Implement Event Watcher (`pkg/controllers/event_controller.go`)
   - [ ] Watch `events.k8s.io/v1` (Cluster-scoped)
   - [ ] Filter: `Reason IN (OOMKilling, Evicted, FailedScheduling, Killing, FailedMount, CrashLoopBackOff, BackOff)`

@@ -94,6 +94,14 @@ var (
 		},
 		[]string{"reason", "namespace", "workload", "cost_center"},
 	)
+
+	finopsLogErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "finops_log_errors_total",
+			Help: "Total number of log errors by namespace, workload, container, and level",
+		},
+		[]string{"namespace", "workload", "container", "level"},
+	)
 )
 
 func init() {
@@ -103,6 +111,7 @@ func init() {
 		eventsFilteredTotal,
 		eventProcessingDuration,
 		finopsEventsTotal,
+		finopsLogErrorsTotal,
 	)
 }
 
@@ -558,6 +567,24 @@ func (r *EventWatcherReconciler) incrementEventCounter(reason, namespace, worklo
 	}
 
 	finopsEventsTotal.WithLabelValues(reason, namespace, workload, costCenter).Inc()
+}
+
+// IncrementLogErrorCounter increments the log error counter for container logs
+func (r *EventWatcherReconciler) IncrementLogErrorCounter(namespace, workload, container, level string) {
+	if workload == "" {
+		workload = "unknown"
+	}
+	if namespace == "" {
+		namespace = "unknown"
+	}
+	if container == "" {
+		container = "unknown"
+	}
+	if level == "" {
+		level = "error"
+	}
+
+	finopsLogErrorsTotal.WithLabelValues(namespace, workload, container, level).Inc()
 }
 
 // SetupWithManager sets up the controller with the Manager

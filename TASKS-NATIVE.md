@@ -365,13 +365,13 @@ This document breaks down the **PLAN-NATIVE.md** into granular, trackable tasks 
   - [x] Increment TSDB Counter: `finops_events_total{reason, namespace, workload, cost_center}`
 
 ### 3.2 Container Log Tailer (Optional - Fluent Bit DaemonSet)
-- [ ] **Task 3.2.1:** Deploy Fluent Bit DaemonSet (if DaemonSets allowed)
-  - [ ] Config: Tail `/var/log/containers/*.log`
-  - [ ] Parser: Regex for `OOM`, `Error`, `Exception`, `OutOfMemory`, `Killed`
-  - [ ] Output: HTTP -> `cost-controller:8081/api/v1/logs`
-- [ ] **Task 3.2.2:** Implement Log Ingestion Endpoint (`pkg/api/logs.go`)
-  - [ ] Parse structured fields (JSON or Regex)
-  - [ ] Map to `LogEvent` CRD + TSDB `finops_log_errors_total{namespace, workload, container, level}`
+- [x] **Task 3.2.1:** Deploy Fluent Bit DaemonSet (if DaemonSets allowed)
+  - [x] Config: Tail `/var/log/containers/*.log`
+  - [x] Parser: Regex for `OOM`, `Error`, `Exception`, `OutOfMemory`, `Killed`
+  - [x] Output: HTTP -> `cost-controller:8081/api/v1/logs`
+- [x] **Task 3.2.2:** Implement Log Ingestion Endpoint (`pkg/api/logs.go`)
+  - [x] Parse structured fields (JSON or Regex)
+  - [x] Map to `LogEvent` CRD + TSDB `finops_log_errors_total{namespace, workload, container, level}`
 
 ### 3.3 Audit Log Webhook (Advanced)
 - [ ] **Task 3.3.1:** Configure Kube-Apiserver Audit Sink (Webhook to `cost-controller:8081/api/v1/audit`)

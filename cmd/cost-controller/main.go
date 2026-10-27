@@ -89,19 +89,6 @@ func main() {
 
 	setupLog.Info("TSDB initialized", "dataDir", tsdbDataDir, "retention", retentionDur)
 
-	// Initialize clients
-	clientFactory, err := clients.NewClientFactory()
-	if err != nil {
-		setupLog.Error(err, "Failed to create client factory")
-		os.Exit(1)
-	}
-
-	// Initialize allocation engine
-	allocEngine := allocation.NewEngine(clientFactory, tsdbInstance)
-
-	// Initialize API gateway
-	queryAPI := api.NewQueryAPI(tsdbInstance.Querier(), reg)
-
 	// Initialize client factory
 	clientConfig := &clients.ClientConfig{
 		KSMURL:                "http://kube-state-metrics:8080",
@@ -122,12 +109,18 @@ func main() {
 		},
 	}
 
-	clientFactory, err := clients.NewClientFactory(ctx, clientConfig)
+	clientFactory, err := clients.NewClientFactory(context.Background(), clientConfig)
 	if err != nil {
 		setupLog.Error(err, "Failed to create client factory")
 		os.Exit(1)
 	}
 	defer clientFactory.Stop()
+
+	// Initialize allocation engine
+	allocEngine := allocation.NewEngine(clientFactory, tsdbInstance)
+
+	// Initialize API gateway
+	queryAPI := api.NewQueryAPI(tsdbInstance.Querier(), reg)
 
 	// Initialize dashboard handler with caching
 	dashboardHandler := api.NewDashboardHandler(
@@ -221,6 +214,9 @@ func main() {
 		r.HandleFunc("/api/v1/dashboard/network", handleDashboardNetwork)
 		r.HandleFunc("/api/v1/recommendations", handleRecommendations)
 		r.HandleFunc("/api/v1/budgets", handleBudgets)
+
+		// Audit webhook endpoint
+		r.HandleFunc("/api/v1/audit", api.AuditHandlerFunc)
 
 		server := &http.Server{
 			Addr:    ":8082",

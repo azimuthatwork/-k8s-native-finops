@@ -354,15 +354,15 @@ This document breaks down the **PLAN-NATIVE.md** into granular, trackable tasks 
 
 ### 3.1 Kubernetes Event Controller (`cmd/event-controller`)
 - [x] **Task 3.1.1:** Scaffold Controller (`kubebuilder create api --group finops --version v1alpha1 --kind LogEvent`)
-- [ ] **Task 3.1.2:** Implement Event Watcher (`pkg/controllers/event_controller.go`)
-  - [ ] Watch `events.k8s.io/v1` (Cluster-scoped)
-  - [ ] Filter: `Reason IN (OOMKilling, Evicted, FailedScheduling, Killing, FailedMount, CrashLoopBackOff, BackOff)`
-- [ ] **Task 3.1.3:** Implement Enrichment Pipeline
-  - [ ] Join `involvedObject` -> Pod -> Owner (Workload) -> Namespace Labels (`cost-center`)
-  - [ ] Join Node -> `NodeCost` CRD (Node Price)
-- [ ] **Task 3.1.4:** Output to CRD & TSDB
-  - [ ] Create/Update `LogEvent` CRD (Immediate visibility)
-  - [ ] Increment TSDB Counter: `finops_events_total{reason, namespace, workload, cost_center}`
+- [x] **Task 3.1.2:** Implement Event Watcher (`pkg/controllers/event_controller.go`)
+  - [x] Watch `events.k8s.io/v1` (Cluster-scoped)
+  - [x] Filter: `Reason IN (OOMKilling, Evicted, FailedScheduling, Killing, FailedMount, CrashLoopBackOff, BackOff)`
+- [x] **Task 3.1.3:** Implement Enrichment Pipeline
+  - [x] Join `involvedObject` -> Pod -> Owner (Workload) -> Namespace Labels (`cost-center`)
+  - [x] Join Node -> `NodeCost` CRD (Node Price)
+- [x] **Task 3.1.4:** Output to CRD & TSDB
+  - [x] Create/Update `LogEvent` CRD (Immediate visibility)
+  - [x] Increment TSDB Counter: `finops_events_total{reason, namespace, workload, cost_center}`
 
 ### 3.2 Container Log Tailer (Optional - Fluent Bit DaemonSet)
 - [ ] **Task 3.2.1:** Deploy Fluent Bit DaemonSet (if DaemonSets allowed)

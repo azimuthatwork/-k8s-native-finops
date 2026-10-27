@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -16,11 +15,13 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	finopsv1alpha1 "github.com/your-org/finops-operator/api/v1alpha1"
+	"github.com/your-org/finops-operator/pkg/cache"
 	"github.com/your-org/finops-operator/pkg/clients"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -28,12 +29,6 @@ import (
 const (
 	// EventControllerName is the name of the controller
 	EventControllerName = "event-watcher-controller"
-
-	// LogEventKind is the kind of LogEvent resource
-	LogEventKind = "LogEvent"
-
-	// LogEventAPIVersion is the API version of LogEvent resource
-	LogEventAPIVersion = "finops.example.com/v1alpha1"
 )
 
 // Filter reasons for events we care about
